@@ -29,10 +29,72 @@ app.get('/health', (req, res) => {
   res.json({ status: 'healthy' });
 });
 
+// Test endpoint to verify Paytm configuration
+app.get('/api/test-paytm', async (req, res) => {
+  try {
+    const testParams = {
+      MID: process.env.PAYTM_MID,
+      WEBSITE: process.env.PAYTM_WEBSITE,
+      INDUSTRY_TYPE_ID: process.env.PAYTM_INDUSTRY_TYPE,
+      CHANNEL_ID: process.env.PAYTM_CHANNEL_ID,
+      ORDER_ID: 'TEST' + Date.now(),
+      CUST_ID: 'TEST_CUSTOMER',
+      TXN_AMOUNT: '1.00',
+      CALLBACK_URL: process.env.PAYTM_CALLBACK_URL,
+      EMAIL: 'test@example.com',
+      MOBILE_NO: '9999999999',
+    };
+
+    // Test checksum generation
+    const checksum = await PaytmChecksum.generateSignature(
+      JSON.stringify(testParams),
+      process.env.PAYTM_MERCHANT_KEY
+    );
+
+    // Test checksum verification
+    const isValid = PaytmChecksum.verifySignature(
+      JSON.stringify(testParams),
+      process.env.PAYTM_MERCHANT_KEY,
+      checksum
+    );
+
+    res.json({
+      status: 'success',
+      message: 'Paytm configuration is working',
+      config: {
+        MID: process.env.PAYTM_MID,
+        WEBSITE: process.env.PAYTM_WEBSITE,
+        INDUSTRY_TYPE: process.env.PAYTM_INDUSTRY_TYPE,
+        CHANNEL_ID: process.env.PAYTM_CHANNEL_ID,
+        CALLBACK_URL: process.env.PAYTM_CALLBACK_URL,
+        FRONTEND_URL: process.env.FRONTEND_URL,
+        merchantKeySet: !!process.env.PAYTM_MERCHANT_KEY,
+        merchantKeyLength: process.env.PAYTM_MERCHANT_KEY?.length || 0,
+      },
+      checksumTest: {
+        generated: !!checksum,
+        verified: isValid,
+        checksumLength: checksum?.length || 0,
+      }
+    });
+  } catch (error) {
+    res.status(500).json({
+      status: 'error',
+      message: error.message,
+      config: {
+        MID: process.env.PAYTM_MID,
+        merchantKeySet: !!process.env.PAYTM_MERCHANT_KEY,
+      }
+    });
+  }
+});
+
 // Initiate Payment - Generate Checksum
 app.post('/api/initiate-payment', async (req, res) => {
   try {
     const { orderId, amount, customerId, customerEmail, customerPhone } = req.body;
+
+    console.log('Initiating payment for order:', orderId);
 
     // Validate required fields
     if (!orderId || !amount || !customerId || !customerPhone) {
@@ -55,10 +117,17 @@ app.post('/api/initiate-payment', async (req, res) => {
       MOBILE_NO: customerPhone,
     };
 
+    console.log('Generating checksum with params:', {
+      ...paytmParams,
+      CALLBACK_URL: paytmParams.CALLBACK_URL,
+    });
+
     const checksum = await PaytmChecksum.generateSignature(
       JSON.stringify(paytmParams),
       process.env.PAYTM_MERCHANT_KEY
     );
+
+    console.log('Checksum generated successfully, length:', checksum?.length);
 
     res.json({
       ...paytmParams,
@@ -66,7 +135,10 @@ app.post('/api/initiate-payment', async (req, res) => {
     });
   } catch (error) {
     console.error('Error generating checksum:', error);
-    res.status(500).json({ error: 'Failed to initiate payment' });
+    res.status(500).json({ 
+      error: 'Failed to initiate payment',
+      message: error.message 
+    });
   }
 });
 
