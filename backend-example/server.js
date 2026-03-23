@@ -72,6 +72,13 @@ app.get('/api/debug-credentials', (req, res) => {
 // Test endpoint to verify Paytm configuration
 app.get('/api/test-paytm', async (req, res) => {
   try {
+    // Clean merchant key - remove quotes if present
+    let merchantKey = String(process.env.PAYTM_MERCHANT_KEY || '').trim();
+    if ((merchantKey.startsWith('"') && merchantKey.endsWith('"')) ||
+        (merchantKey.startsWith("'") && merchantKey.endsWith("'"))) {
+      merchantKey = merchantKey.slice(1, -1);
+    }
+
     const testParams = {
       MID: process.env.PAYTM_MID,
       WEBSITE: process.env.PAYTM_WEBSITE,
@@ -87,8 +94,8 @@ app.get('/api/test-paytm', async (req, res) => {
 
     console.log('\n=== PAYTM CONFIGURATION TEST ===');
     console.log('MID:', process.env.PAYTM_MID);
-    console.log('Merchant Key Present:', !!process.env.PAYTM_MERCHANT_KEY);
-    console.log('Merchant Key Length:', process.env.PAYTM_MERCHANT_KEY?.length);
+    console.log('Merchant Key Present:', !!merchantKey);
+    console.log('Merchant Key Length:', merchantKey.length);
     console.log('Frontend URL:', process.env.FRONTEND_URL);
     console.log('Callback URL:', process.env.PAYTM_CALLBACK_URL);
     console.log('Node Env:', process.env.NODE_ENV);
@@ -97,7 +104,7 @@ app.get('/api/test-paytm', async (req, res) => {
     console.log('\n--- Generating Test Checksum ---');
     const checksum = await PaytmChecksum.generateSignature(
       testParams,
-      process.env.PAYTM_MERCHANT_KEY
+      merchantKey
     );
 
     console.log('✓ Checksum generated successfully');
@@ -107,7 +114,7 @@ app.get('/api/test-paytm', async (req, res) => {
     console.log('\n--- Verifying Test Checksum ---');
     const isValid = PaytmChecksum.verifySignature(
       testParams,
-      process.env.PAYTM_MERCHANT_KEY,
+      merchantKey,
       checksum
     );
 
@@ -200,8 +207,14 @@ app.post('/api/initiate-payment', async (req, res) => {
       console.log(`  ${key}: "${paytmParams[key]}"`);
     });
 
-    // Ensure merchant key is exactly as configured
-    const merchantKey = String(process.env.PAYTM_MERCHANT_KEY).trim();
+    // Ensure merchant key is exactly as configured - remove any quotes
+    let merchantKey = String(process.env.PAYTM_MERCHANT_KEY || '').trim();
+    // Remove surrounding quotes if they exist
+    if ((merchantKey.startsWith('"') && merchantKey.endsWith('"')) ||
+        (merchantKey.startsWith("'") && merchantKey.endsWith("'"))) {
+      merchantKey = merchantKey.slice(1, -1);
+    }
+
     console.log('\nMerchant Key Info:');
     console.log('  Length:', merchantKey.length);
     console.log('  Hex:', Buffer.from(merchantKey, 'utf8').toString('hex'));
@@ -248,16 +261,23 @@ app.post('/api/payment-callback', async (req, res) => {
     // For production, verify checksum
     if (CHECKSUMHASH && process.env.PAYTM_MERCHANT_KEY) {
       try {
+        // Clean merchant key - remove quotes if present
+        let merchantKey = String(process.env.PAYTM_MERCHANT_KEY).trim();
+        if ((merchantKey.startsWith('"') && merchantKey.endsWith('"')) ||
+            (merchantKey.startsWith("'") && merchantKey.endsWith("'"))) {
+          merchantKey = merchantKey.slice(1, -1);
+        }
+
         const paytmParams = { ...req.body };
         delete paytmParams.CHECKSUMHASH;
-        
+
         // Pass object directly, not JSON string
         const isValidChecksum = PaytmChecksum.verifySignature(
           paytmParams,
-          process.env.PAYTM_MERCHANT_KEY,
+          merchantKey,
           CHECKSUMHASH
         );
-        
+
         console.log('Checksum verification:', isValidChecksum);
         
         if (!isValidChecksum) {
@@ -302,6 +322,13 @@ app.post('/api/verify-transaction', async (req, res) => {
       return res.status(400).json({ error: 'Order ID is required' });
     }
 
+    // Clean merchant key - remove quotes if present
+    let merchantKey = String(process.env.PAYTM_MERCHANT_KEY || '').trim();
+    if ((merchantKey.startsWith('"') && merchantKey.endsWith('"')) ||
+        (merchantKey.startsWith("'") && merchantKey.endsWith("'"))) {
+      merchantKey = merchantKey.slice(1, -1);
+    }
+
     const paytmParams = {
       MID: process.env.PAYTM_MID,
       ORDERID: orderId,
@@ -310,7 +337,7 @@ app.post('/api/verify-transaction', async (req, res) => {
     // Fix: Pass object directly, not JSON string
     const checksum = await PaytmChecksum.generateSignature(
       paytmParams,
-      process.env.PAYTM_MERCHANT_KEY
+      merchantKey
     );
 
     res.json({
