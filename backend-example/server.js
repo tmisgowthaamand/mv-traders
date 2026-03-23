@@ -16,18 +16,45 @@ app.use(cors({
   credentials: true
 }));
 
-// Health check endpoint for Render
-app.get('/', (req, res) => {
-  res.json({ 
-    status: 'ok', 
-    message: 'Paytm Payment Gateway API',
-    timestamp: new Date().toISOString()
+// Debug endpoint - verify credentials match
+app.get('/api/debug-credentials', (req, res) => {
+  const merchantKey = String(process.env.PAYTM_MERCHANT_KEY || '').trim();
+
+  res.json({
+    status: 'DEBUG INFO',
+    credentials: {
+      MID: process.env.PAYTM_MID,
+      MERCHANT_KEY_SET: !!merchantKey,
+      MERCHANT_KEY_LENGTH: merchantKey.length,
+      MERCHANT_KEY_HEX: Buffer.from(merchantKey, 'utf8').toString('hex'),
+      MERCHANT_KEY_DISPLAY: merchantKey.split('').map(c => `${c}(${c.charCodeAt(0).toString(16)})`).join(' '),
+      WEBSITE: process.env.PAYTM_WEBSITE,
+      INDUSTRY_TYPE: process.env.PAYTM_INDUSTRY_TYPE,
+      CHANNEL_ID: process.env.PAYTM_CHANNEL_ID,
+      CALLBACK_URL: process.env.PAYTM_CALLBACK_URL,
+      FRONTEND_URL: process.env.FRONTEND_URL,
+    },
+    troubleshooting: {
+      issue: 'Invalid checksum error 330 from Paytm',
+      possibleCauses: [
+        '1. MID and MERCHANT_KEY do not belong together in Paytm',
+        '2. Credentials are for staging environment, not production',
+        '3. Merchant key may have been regenerated in Paytm dashboard',
+        '4. Credentials may be expired or revoked'
+      ],
+      solution: 'Verify in https://dashboard.paytm.com/next/apikeys that:',
+      steps: [
+        'Login to Paytm Merchant Dashboard',
+        'Check API Keys section',
+        'Confirm MID matches exactly: ' + process.env.PAYTM_MID,
+        'Copy merchant key exactly (no spaces before/after)',
+        'Ensure you are viewing PRODUCTION credentials (not staging)',
+        'Update .env and redeploy if credentials changed'
+      ]
+    }
   });
 });
 
-app.get('/health', (req, res) => {
-  res.json({ status: 'healthy' });
-});
 
 // Test endpoint to verify Paytm configuration
 app.get('/api/test-paytm', async (req, res) => {
