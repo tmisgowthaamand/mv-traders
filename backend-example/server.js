@@ -73,47 +73,57 @@ app.post('/api/initiate-payment', async (req, res) => {
 // Payment Callback - Verify Payment
 app.post('/api/payment-callback', async (req, res) => {
   try {
+    console.log('Payment callback received:', req.body);
+    
     const paytmChecksum = req.body.CHECKSUMHASH;
+    
+    if (!paytmChecksum) {
+      console.error('No checksum received');
+      return res.status(400).json({ error: 'No checksum received' });
+    }
+    
     const paytmParams = { ...req.body };
     delete paytmParams.CHECKSUMHASH;
 
+    // Convert params to string for verification
+    const paramsString = JSON.stringify(paytmParams);
+    
     const isValidChecksum = PaytmChecksum.verifySignature(
-      JSON.stringify(paytmParams),
+      paramsString,
       process.env.PAYTM_MERCHANT_KEY,
       paytmChecksum
     );
+
+    console.log('Checksum valid:', isValidChecksum);
 
     if (isValidChecksum) {
       const { ORDERID, STATUS, TXNID, TXNAMOUNT, RESPCODE, RESPMSG } = req.body;
 
       if (STATUS === 'TXN_SUCCESS') {
-        // Payment successful - Update database
         console.log('Payment successful:', {
           orderId: ORDERID,
           txnId: TXNID,
           amount: TXNAMOUNT,
         });
 
-        // TODO: Update order status in database
-        // TODO: Send confirmation email
-        // TODO: Update inventory
-
-        // Redirect to frontend success page
         const redirectUrl = `${process.env.FRONTEND_URL}/payment-callback?ORDERID=${ORDERID}&TXNID=${TXNID}&TXNAMOUNT=${TXNAMOUNT}&STATUS=${STATUS}&RESPCODE=${RESPCODE}&RESPMSG=${encodeURIComponent(RESPMSG)}`;
-        res.redirect(302, redirectUrl);
+        return res.redirect(302, redirectUrl);
       } else {
-        // Payment failed
         console.log('Payment failed:', RESPMSG);
         
         const redirectUrl = `${process.env.FRONTEND_URL}/payment-callback?ORDERID=${ORDERID}&STATUS=${STATUS}&RESPCODE=${RESPCODE}&RESPMSG=${encodeURIComponent(RESPMSG)}`;
-        res.redirect(302, redirectUrl);
+        return res.redirect(302, redirectUrl);
       }
     } else {
-      res.status(400).json({ error: 'Invalid checksum' });
+      console.error('Invalid checksum');
+      return res.status(400).json({ error: 'Invalid checksum' });
     }
   } catch (error) {
     console.error('Error verifying payment:', error);
-    res.status(500).json({ error: 'Payment verification failed' });
+    
+    // Redirect to frontend with error
+    const redirectUrl = `${process.env.FRONTEND_URL}/payment-callback?STATUS=ERROR&RESPMSG=${encodeURIComponent('Payment verification failed')}`;
+    return res.redirect(302, redirectUrl);
   }
 });
 
