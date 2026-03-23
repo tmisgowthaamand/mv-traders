@@ -113,7 +113,9 @@ app.post('/api/initiate-payment', async (req, res) => {
   try {
     const { orderId, amount, customerId, customerEmail, customerPhone } = req.body;
 
-    console.log('Initiating payment for order:', orderId);
+    console.log('\n=== INITIATE PAYMENT REQUEST ===');
+    console.log('Order ID:', orderId);
+    console.log('Amount:', amount);
 
     // Validate required fields
     if (!orderId || !amount || !customerId || !customerPhone) {
@@ -153,23 +155,36 @@ app.post('/api/initiate-payment', async (req, res) => {
       MOBILE_NO: String(customerPhone).trim(),
     };
 
-    console.log('Payment Parameters (for checksum):', JSON.stringify(paytmParams, null, 2));
-    console.log('Merchant Key Length:', process.env.PAYTM_MERCHANT_KEY?.length);
+    console.log('\nChecksum Parameters (in order):');
+    Object.keys(paytmParams).sort().forEach(key => {
+      console.log(`  ${key}: "${paytmParams[key]}"`);
+    });
+
+    // Ensure merchant key is exactly as configured
+    const merchantKey = String(process.env.PAYTM_MERCHANT_KEY).trim();
+    console.log('\nMerchant Key Info:');
+    console.log('  Length:', merchantKey.length);
+    console.log('  Hex:', Buffer.from(merchantKey, 'utf8').toString('hex'));
+    console.log('  Chars:', Array.from(merchantKey).map(c => `${c}(${c.charCodeAt(0)})`).join(' '));
 
     // Generate checksum using Paytm's method
+    console.log('\nGenerating checksum...');
     const checksum = await PaytmChecksum.generateSignature(
       paytmParams,
-      process.env.PAYTM_MERCHANT_KEY
+      merchantKey
     );
 
-    console.log('✓ Checksum generated successfully, length:', checksum?.length);
+    console.log('✓ Checksum generated successfully');
+    console.log('  Length:', checksum?.length);
+    console.log('  Checksum:', checksum);
 
     res.json({
       ...paytmParams,
       CHECKSUMHASH: checksum,
     });
   } catch (error) {
-    console.error('✗ Error generating checksum:', error.message);
+    console.error('\n✗ Error generating checksum:');
+    console.error('Message:', error.message);
     console.error('Stack:', error.stack);
     res.status(500).json({
       error: 'Failed to initiate payment',
