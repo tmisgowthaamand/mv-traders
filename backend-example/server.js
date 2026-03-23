@@ -45,15 +45,15 @@ app.get('/api/test-paytm', async (req, res) => {
       MOBILE_NO: '9999999999',
     };
 
-    // Test checksum generation
+    // Test checksum generation - pass object directly, not JSON string
     const checksum = await PaytmChecksum.generateSignature(
-      JSON.stringify(testParams),
+      testParams,
       process.env.PAYTM_MERCHANT_KEY
     );
 
     // Test checksum verification
     const isValid = PaytmChecksum.verifySignature(
-      JSON.stringify(testParams),
+      testParams,
       process.env.PAYTM_MERCHANT_KEY,
       checksum
     );
@@ -104,6 +104,7 @@ app.post('/api/initiate-payment', async (req, res) => {
       });
     }
 
+    // Paytm parameters - order matters!
     const paytmParams = {
       MID: process.env.PAYTM_MID,
       WEBSITE: process.env.PAYTM_WEBSITE || 'DEFAULT',
@@ -117,13 +118,11 @@ app.post('/api/initiate-payment', async (req, res) => {
       MOBILE_NO: customerPhone,
     };
 
-    console.log('Generating checksum with params:', {
-      ...paytmParams,
-      CALLBACK_URL: paytmParams.CALLBACK_URL,
-    });
+    console.log('Generating checksum with params:', paytmParams);
 
+    // Generate checksum using Paytm's method
     const checksum = await PaytmChecksum.generateSignature(
-      JSON.stringify(paytmParams),
+      paytmParams,
       process.env.PAYTM_MERCHANT_KEY
     );
 
@@ -160,8 +159,9 @@ app.post('/api/payment-callback', async (req, res) => {
         const paytmParams = { ...req.body };
         delete paytmParams.CHECKSUMHASH;
         
+        // Pass object directly, not JSON string
         const isValidChecksum = PaytmChecksum.verifySignature(
-          JSON.stringify(paytmParams),
+          paytmParams,
           process.env.PAYTM_MERCHANT_KEY,
           CHECKSUMHASH
         );
