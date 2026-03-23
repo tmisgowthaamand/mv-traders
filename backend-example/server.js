@@ -45,22 +45,38 @@ app.get('/api/test-paytm', async (req, res) => {
       MOBILE_NO: '9999999999',
     };
 
+    console.log('\n=== PAYTM CONFIGURATION TEST ===');
+    console.log('MID:', process.env.PAYTM_MID);
+    console.log('Merchant Key Present:', !!process.env.PAYTM_MERCHANT_KEY);
+    console.log('Merchant Key Length:', process.env.PAYTM_MERCHANT_KEY?.length);
+    console.log('Frontend URL:', process.env.FRONTEND_URL);
+    console.log('Callback URL:', process.env.PAYTM_CALLBACK_URL);
+    console.log('Node Env:', process.env.NODE_ENV);
+
     // Test checksum generation - pass object directly, not JSON string
+    console.log('\n--- Generating Test Checksum ---');
     const checksum = await PaytmChecksum.generateSignature(
       testParams,
       process.env.PAYTM_MERCHANT_KEY
     );
 
+    console.log('✓ Checksum generated successfully');
+    console.log('Checksum length:', checksum?.length);
+
     // Test checksum verification
+    console.log('\n--- Verifying Test Checksum ---');
     const isValid = PaytmChecksum.verifySignature(
       testParams,
       process.env.PAYTM_MERCHANT_KEY,
       checksum
     );
 
+    console.log('✓ Checksum verification:', isValid);
+
     res.json({
       status: 'success',
-      message: 'Paytm configuration is working',
+      message: 'Paytm configuration is working correctly',
+      environment: process.env.NODE_ENV,
       config: {
         MID: process.env.PAYTM_MID,
         WEBSITE: process.env.PAYTM_WEBSITE,
@@ -75,15 +91,18 @@ app.get('/api/test-paytm', async (req, res) => {
         generated: !!checksum,
         verified: isValid,
         checksumLength: checksum?.length || 0,
+        testOrderId: testParams.ORDER_ID,
       }
     });
   } catch (error) {
+    console.error('\n✗ Test failed:', error.message);
     res.status(500).json({
       status: 'error',
       message: error.message,
       config: {
         MID: process.env.PAYTM_MID,
         merchantKeySet: !!process.env.PAYTM_MERCHANT_KEY,
+        merchantKeyLength: process.env.PAYTM_MERCHANT_KEY?.length || 0,
       }
     });
   }
@@ -98,27 +117,44 @@ app.post('/api/initiate-payment', async (req, res) => {
 
     // Validate required fields
     if (!orderId || !amount || !customerId || !customerPhone) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: 'Missing required fields',
         required: ['orderId', 'amount', 'customerId', 'customerPhone']
       });
     }
 
-    // Paytm parameters - order matters!
+    // Validate Paytm configuration
+    if (!process.env.PAYTM_MID) {
+      console.error('PAYTM_MID not configured');
+      return res.status(500).json({ error: 'Paytm MID not configured' });
+    }
+
+    if (!process.env.PAYTM_MERCHANT_KEY) {
+      console.error('PAYTM_MERCHANT_KEY not configured');
+      return res.status(500).json({ error: 'Paytm merchant key not configured' });
+    }
+
+    if (!process.env.PAYTM_CALLBACK_URL) {
+      console.error('PAYTM_CALLBACK_URL not configured');
+      return res.status(500).json({ error: 'Paytm callback URL not configured' });
+    }
+
+    // Paytm parameters - ensure all values are strings and properly formatted
     const paytmParams = {
-      MID: process.env.PAYTM_MID,
-      WEBSITE: process.env.PAYTM_WEBSITE || 'DEFAULT',
-      INDUSTRY_TYPE_ID: process.env.PAYTM_INDUSTRY_TYPE || 'Retail',
-      CHANNEL_ID: process.env.PAYTM_CHANNEL_ID || 'WEB',
-      ORDER_ID: orderId,
-      CUST_ID: customerId,
-      TXN_AMOUNT: amount,
-      CALLBACK_URL: process.env.PAYTM_CALLBACK_URL,
-      EMAIL: customerEmail || 'customer@example.com',
-      MOBILE_NO: customerPhone,
+      MID: String(process.env.PAYTM_MID).trim(),
+      WEBSITE: String(process.env.PAYTM_WEBSITE || 'DEFAULT').trim(),
+      INDUSTRY_TYPE_ID: String(process.env.PAYTM_INDUSTRY_TYPE || 'Retail').trim(),
+      CHANNEL_ID: String(process.env.PAYTM_CHANNEL_ID || 'WEB').trim(),
+      ORDER_ID: String(orderId).trim(),
+      CUST_ID: String(customerId).trim(),
+      TXN_AMOUNT: String(amount).trim(),
+      CALLBACK_URL: String(process.env.PAYTM_CALLBACK_URL).trim(),
+      EMAIL: String(customerEmail || 'customer@example.com').trim(),
+      MOBILE_NO: String(customerPhone).trim(),
     };
 
-    console.log('Generating checksum with params:', paytmParams);
+    console.log('Payment Parameters (for checksum):', JSON.stringify(paytmParams, null, 2));
+    console.log('Merchant Key Length:', process.env.PAYTM_MERCHANT_KEY?.length);
 
     // Generate checksum using Paytm's method
     const checksum = await PaytmChecksum.generateSignature(
@@ -126,17 +162,18 @@ app.post('/api/initiate-payment', async (req, res) => {
       process.env.PAYTM_MERCHANT_KEY
     );
 
-    console.log('Checksum generated successfully, length:', checksum?.length);
+    console.log('✓ Checksum generated successfully, length:', checksum?.length);
 
     res.json({
       ...paytmParams,
       CHECKSUMHASH: checksum,
     });
   } catch (error) {
-    console.error('Error generating checksum:', error);
-    res.status(500).json({ 
+    console.error('✗ Error generating checksum:', error.message);
+    console.error('Stack:', error.stack);
+    res.status(500).json({
       error: 'Failed to initiate payment',
-      message: error.message 
+      message: error.message
     });
   }
 });
@@ -215,8 +252,9 @@ app.post('/api/verify-transaction', async (req, res) => {
       ORDERID: orderId,
     };
 
+    // Fix: Pass object directly, not JSON string
     const checksum = await PaytmChecksum.generateSignature(
-      JSON.stringify(paytmParams),
+      paytmParams,
       process.env.PAYTM_MERCHANT_KEY
     );
 
