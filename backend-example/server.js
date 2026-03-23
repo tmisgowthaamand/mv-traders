@@ -16,6 +16,19 @@ app.use(cors({
   credentials: true
 }));
 
+// Health check endpoint for Render
+app.get('/', (req, res) => {
+  res.json({
+    status: 'ok',
+    message: 'Paytm Payment Gateway API',
+    timestamp: new Date().toISOString()
+  });
+});
+
+app.get('/health', (req, res) => {
+  res.json({ status: 'healthy' });
+});
+
 // Debug endpoint - verify credentials match
 app.get('/api/debug-credentials', (req, res) => {
   const merchantKey = String(process.env.PAYTM_MERCHANT_KEY || '').trim();
